@@ -1,0 +1,9 @@
+{
+  "name": "offload",
+  "version": "0.1.0",
+  "description": "Hand grunt work to locally installed CLI agents (opencode, mimo, grok, codex) to save tokens on the primary model, with automatic fallback when a backend is out of quota.",
+  "author": {
+    "name": "Project516",
+    "url": "https://github.com/Project516"
+  }
+}

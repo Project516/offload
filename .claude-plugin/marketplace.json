@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "offload",
+  "description": "Cheap labor for expensive agents: delegate mechanical coding tasks to locally installed CLI agents.",
+  "owner": {
+    "name": "Project516",
+    "url": "https://github.com/Project516"
+  },
+  "plugins": [
+    {
+      "name": "offload",
+      "description": "Hand grunt work to opencode, mimo, grok, or codex with automatic quota fallback.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

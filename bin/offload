@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# offload - run a coding task on a locally installed CLI agent (opencode,
+# mimo, grok, codex) instead of the calling model. Tries backends in order
+# and falls through to the next one when a backend is missing or out of
+# quota, so free-tier limits degrade gracefully instead of failing the task.
+set -u
+
+usage() {
+  cat <<'EOF'
+usage: offload [options] "task prompt"
+
+options:
+  --dir DIR        working directory for the agent (default: current dir)
+  --backend NAME   use one specific backend instead of the fallback chain
+  --timeout SECS   per-backend time limit (default: 600)
+  --list           show which backends are installed and exit
+  -h, --help       show this help
+
+environment:
+  OFFLOAD_BACKENDS   space-separated fallback order
+                     (default: "opencode mimo grok codex")
+  OFFLOAD_TIMEOUT    default per-backend time limit in seconds
+EOF
+}
+
+DIR="$PWD"
+BACKENDS="${OFFLOAD_BACKENDS:-opencode mimo grok codex}"
+TIMEOUT="${OFFLOAD_TIMEOUT:-600}"
+PROMPT=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dir) DIR="$2"; shift 2 ;;
+    --backend) BACKENDS="$2"; shift 2 ;;
+    --timeout) TIMEOUT="$2"; shift 2 ;;
+    --list)
+      for b in $BACKENDS; do
+        if command -v "$b" >/dev/null 2>&1; then echo "$b: installed"; else echo "$b: missing"; fi
+      done
+      exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "offload: unknown option $1" >&2; usage >&2; exit 2 ;;
+    *) PROMPT="$1"; shift ;;
+  esac
+done
+
+[ -n "$PROMPT" ] || { usage >&2; exit 2; }
+
+# Errors that mean "this backend is tapped out, another might work".
+QUOTA_RE='usage limit|rate.?limit|quota|too many requests|HTTP 429|status 429|insufficient.?(credit|quota)'
+
+run_backend() {
+  case "$1" in
+    opencode) timeout "$TIMEOUT" opencode run "$PROMPT" --dir "$DIR" --auto 2>&1 ;;
+    mimo) timeout "$TIMEOUT" mimo run "$PROMPT" --dir "$DIR" --dangerously-skip-permissions 2>&1 ;;
+    grok) timeout "$TIMEOUT" grok -p "$PROMPT" --cwd "$DIR" --permission-mode acceptEdits 2>&1 ;;
+    codex) timeout "$TIMEOUT" codex exec --cd "$DIR" --full-auto "$PROMPT" 2>&1 ;;
+    *) echo "offload: no adapter for backend '$1'" >&2; return 3 ;;
+  esac
+}
+
+for b in $BACKENDS; do
+  command -v "$b" >/dev/null 2>&1 || continue
+  out=$(run_backend "$b")
+  rc=$?
+  if [ $rc -eq 3 ]; then continue; fi
+  if [ $rc -eq 124 ]; then
+    echo "offload: $b timed out after ${TIMEOUT}s, trying next backend" >&2
+    continue
+  fi
+  if [ $rc -ne 0 ] && printf '%s' "$out" | grep -qiE "$QUOTA_RE"; then
+    echo "offload: $b is out of quota, trying next backend" >&2
+    continue
+  fi
+  # Strip ANSI escapes so the calling agent gets clean text.
+  printf '%s\n' "$out" | sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\x1b\][^\x07]*\x07//g'
+  echo "offload: ran on $b (exit $rc)" >&2
+  exit $rc
+done
+
+echo "offload: no installed backend could take the task (tried: $BACKENDS)" >&2
+exit 1
