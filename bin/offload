@@ -18,7 +18,7 @@ options:
 
 environment:
   OFFLOAD_BACKENDS   space-separated fallback order
-                     (default: "opencode mimo grok codex")
+                     (default: "opencode mimo grok codex amp freebuff")
   OFFLOAD_TIMEOUT    default per-backend time limit in seconds
 EOF
 }
@@ -55,6 +55,8 @@ run_backend() {
     mimo) timeout "$TIMEOUT" mimo run "$PROMPT" --dir "$DIR" --dangerously-skip-permissions 2>&1 ;;
     grok) timeout "$TIMEOUT" grok -p "$PROMPT" --cwd "$DIR" --permission-mode acceptEdits 2>&1 ;;
     codex) timeout "$TIMEOUT" codex exec --cd "$DIR" --full-auto "$PROMPT" 2>&1 ;;
+    amp) timeout "$TIMEOUT" amp --execute "$PROMPT" --dir "$DIR" 2>&1 ;;
+    freebuff) timeout "$TIMEOUT" freebuff run "$PROMPT" --dir "$DIR" --auto 2>&1 ;;
     *) echo "offload: no adapter for backend '$1'" >&2; return 3 ;;
   esac
 }
